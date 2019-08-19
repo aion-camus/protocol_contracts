@@ -82,11 +82,15 @@ public class PoolRegistry {
         System.arraycopy(stakerRegistryAddr, 0, poolCustodianContract, poolCustodianContract.length - Address.LENGTH, Address.LENGTH);
         result = Blockchain.create(BigInteger.ZERO, poolCustodianContract, Blockchain.getRemainingEnergy());
         require(result.isSuccess());
-        Address  custodianAddress = new Address(result.getReturnData());
+        Address custodianAddress = new Address(result.getReturnData());
 
         // step 3: update pool state
         PoolState ps = new PoolState(caller, coinbaseAddress, custodianAddress, metaData, commissionRate);
+
+        // caller is now a future staker
         pools.put(caller, ps);
+        // Event telling the caller with coinbase and custodian address
+        Blockchain.log(coinbaseAddress.toByteArray(), custodianAddress.toByteArray(), caller.toByteArray());
 
         return coinbaseAddress;
     }
@@ -109,6 +113,7 @@ public class PoolRegistry {
         // The reason for this is to make the stake (value) in case the pool misbehaves.
         PoolState ps = pools.get(pool);
         if (caller.equals(pool)) {
+            // a staker delegates to himself, save value in custodian contract
             secureCall(ps.custodianAddress, value, new byte[0], Blockchain.getRemainingEnergy());
         }
 
@@ -141,7 +146,7 @@ public class PoolRegistry {
         // update rewards state machine
         ps.rewards.onVote(delegator, Blockchain.getBlockNumber(), value.longValue());
 
-        // possible pool state change
+        // possible pool state change, Camus: staker delegating himself will trigger pool state check
         if (delegator.equals(ps.stakerAddress)) {
             checkPoolState(ps.stakerAddress);
         }
@@ -501,6 +506,7 @@ public class PoolRegistry {
      * @param delegator the delegator address
      * @return the amount of outstanding rewards
      */
+    @Callable
     public static long getRewards(Address pool, Address delegator) {
         requirePool(pool);
         requireNonNull(delegator);

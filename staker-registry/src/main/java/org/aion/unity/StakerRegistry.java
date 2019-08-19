@@ -235,6 +235,58 @@ public class StakerRegistry {
         return id;
     }
 
+    /*
+     * Get pending transfer IDs
+     */
+    @Callable
+    public static byte[] getPendingTransfers(long from, long to) {
+        requireNoValue();
+        requirePositive(from);
+        require(to >= from);
+
+        ABIStreamingEncoder encoder = new ABIStreamingEncoder();
+        encoder.encodeOneLong(pendingTransfers.size());
+
+        for (long idx = from; idx <= to; idx++) {
+            PendingTransfer transfer = pendingTransfers.get(idx);
+            if (transfer == null) {
+                break;
+            } else {
+                encoder.encodeOneAddress(transfer.initiator);
+                encoder.encodeOneAddress(transfer.fromStaker);
+                encoder.encodeOneAddress(transfer.toStaker);
+                encoder.encodeOneAddress(transfer.recipient);
+                encoder.encodeOneByteArray(transfer.value.toByteArray());
+            }
+        }
+
+        return encoder.toBytes();
+    }
+
+    /*
+     * Get pending unvote IDs
+     */
+    public static byte[] getPendingUnvotes(long from, long to) {
+        requireNoValue();
+        requirePositive(from);
+        require(to >= from);
+
+        ABIStreamingEncoder encoder = new ABIStreamingEncoder();
+        encoder.encodeOneLong(pendingUnvotes.size());
+
+        for (long idx = from; idx <= to; idx++) {
+            PendingUnvote unvote = pendingUnvotes.get(idx);
+            if (unvote == null) {
+                break;
+            } else {
+                encoder.encodeOneAddress(unvote.initiator);
+                encoder.encodeOneAddress(unvote.recipient);
+                encoder.encodeOneByteArray(unvote.value.toByteArray());
+            }
+        }
+        return encoder.toBytes();
+    }
+
     /**
      * Finalizes an un-vote operation, specified by id.
      *
@@ -293,69 +345,69 @@ public class StakerRegistry {
 
     @Callable
     public static void slash(int type, byte[] ...headers) {
-        switch(type) {
-            // Here, I'm implementing one slashing condition, dunkle, to test
-            // the slashing workflow. Please replace with whatever conditions
-            // the team eventually decides.
-            case 1:
-                require(headers.length == 1);
-
-                // decode block header
-                AionBlockHeader header = new AionBlockHeader(headers[0]);
-                byte[] hash = header.getHash();
-                byte[] correctHash = "test".getBytes(); // FIXME: use `Blockchain.getBlockHash(header.number)`;
-
-                // avoid double-slashing
-                require(!slashedHeaders.contains(new ByteArrayWrapper(hash)));
-
-                if (!Arrays.equals(hash, correctHash)) {
-                    // find the staker
-                    Address staker = stakers.keySet().iterator().next(); // FIXME: use `signingAddresses.get(header.getSigner())`;
-                    requireNonNull(staker);
-
-                    slash(staker);
-                }
-                break;
-        }
+//        switch(type) {
+//            // Here, I'm implementing one slashing condition, dunkle, to test
+//            // the slashing workflow. Please replace with whatever conditions
+//            // the team eventually decides.
+//            case 1:
+//                require(headers.length == 1);
+//
+//                // decode block header
+//                AionBlockHeader header = new AionBlockHeader(headers[0]);
+//                byte[] hash = header.getHash();
+//                byte[] correctHash = "test".getBytes(); // FIXME: use `Blockchain.getBlockHash(header.number)`;
+//
+//                // avoid double-slashing
+//                require(!slashedHeaders.contains(new ByteArrayWrapper(hash)));
+//
+//                if (!Arrays.equals(hash, correctHash)) {
+//                    // find the staker
+//                    Address staker = stakers.keySet().iterator().next(); // FIXME: use `signingAddresses.get(header.getSigner())`;
+//                    requireNonNull(staker);
+//
+//                    slash(staker);
+//                }
+//                break;
+//        }
     }
 
     private static void slash(Address staker) {
-        Staker s = stakers.get(staker);
-
-        // deduct the stake of the staker
-        BigInteger selfStake = getOrDefault(s.stakes, staker, BigInteger.ZERO);
-        require(selfStake.compareTo(PENALTY_AMOUNT) >= 0);
-        s.stakes.put(staker, selfStake.min(PENALTY_AMOUNT));
-
-        // transfer the slashed stake to the reporter TODO: Yao has different view on this
-        secureCall(Blockchain.getCaller(), PENALTY_AMOUNT, new byte[0], Blockchain.getRemainingEnergy());
-
-        // NOTE: when calling the onSlash callback, cap the energy limit and ignore
-        // the call results. Otherwise, a staker can set up a energy sucker as listener
-        // to prevent a slashing.
-
-        // Also, to make sure the pool registry have enough energy to execute
-        // its internal logic, we should check the remaining energy here.
-
-        // In conclusion, we need to make sure the listener get executed with enough
-        // energy and prevent a listener from stopping a slashing event.
-
-        // FIXME: reduce this number after optimizing the energy usage in pool registry.
-        long energyForListener = 2_000_000L;
-        long remainingEnergy = Blockchain.getRemainingEnergy();
-        require(remainingEnergy > energyForListener * s.listeners.size() + 100_000L);
-
-        // FIXME: limit the max number of listeners per staker
-        // otherwise, staker can register many listeners to prevent slashing.
-
-        for (Address listener : s.listeners) {
-            byte[] data = new ABIStreamingEncoder()
-                    .encodeOneString("onSlashing")
-                    .encodeOneAddress(staker)
-                    .encodeOneLong(PENALTY_AMOUNT.longValue())
-                    .toBytes();
-            Blockchain.call(listener, BigInteger.ZERO, data, energyForListener);
-        }
+//        Staker s = stakers.get(staker);
+//
+//        // deduct the stake of the staker
+//        BigInteger selfStake = getOrDefault(s.stakes, staker, BigInteger.ZERO);
+//        require(selfStake.compareTo(PENALTY_AMOUNT) >= 0);
+//        s.stakes.put(staker, selfStake.min(PENALTY_AMOUNT));
+//
+//        // transfer the slashed stake to the reporter TODO: Yao has different view on this
+//        secureCall(Blockchain.getCaller(), PENALTY_AMOUNT, new byte[0], Blockchain.getRemainingEnergy());
+//
+//        // NOTE: when calling the onSlash callback, cap the energy limit and ignore
+//        // the call results. Otherwise, a staker can set up a energy sucker as listener
+//        // to prevent a slashing.
+//
+//        // Also, to make sure the pool registry have enough energy to execute
+//        // its internal logic, we should check the remaining energy here.
+//
+//        // In conclusion, we need to make sure the listener get executed with enough
+//        // energy and prevent a listener from stopping a slashing event.
+//
+//        // FIXME: reduce this number after optimizing the energy usage in pool registry.
+//        long energyForListener = 2_000_000L;
+//        long remainingEnergy = Blockchain.getRemainingEnergy();
+//        require(remainingEnergy > energyForListener * s.listeners.size() + 100_000L);
+//
+//        // FIXME: limit the max number of listeners per staker
+//        // otherwise, staker can register many listeners to prevent slashing.
+//
+//        for (Address listener : s.listeners) {
+//            byte[] data = new ABIStreamingEncoder()
+//                    .encodeOneString("onSlashing")
+//                    .encodeOneAddress(staker)
+//                    .encodeOneLong(PENALTY_AMOUNT.longValue())
+//                    .toBytes();
+//            Blockchain.call(listener, BigInteger.ZERO, data, energyForListener);
+//        }
     }
 
 
